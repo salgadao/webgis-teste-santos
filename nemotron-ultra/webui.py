@@ -10,37 +10,140 @@ base_url = os.getenv("NVIDIA_BASE_URL", "https://integrate.api.nvidia.com/v1")
 model = os.getenv("NEMOTRON_MODEL", "nvidia/nemotron-3-ultra-550b-a55b")
 
 if not api_key or api_key.startswith("nvapi-SUA_CHAVE"):
-    raise SystemExit("Configure NVIDIA_API_KEY no arquivo .env antes de iniciar a interface.")
+    raise SystemExit(
+        "NVIDIA_API_KEY não configurada. Gere uma chave NOVA e defina-a no ambiente antes de iniciar."
+    )
 
 client = OpenAI(api_key=api_key, base_url=base_url)
 
-SYSTEM = "Você é um assistente técnico. Responda em português do Brasil, de forma clara e precisa."
+PROMPTS = {
+    "360° Business Lab": """
+Você é o estrategista principal de um negócio brasileiro de presença digital local e produção audiovisual para empresas.
+Seu trabalho é transformar uma operação ainda em validação em um negócio comercialmente viável, simples de vender e escalável.
+
+Contexto-base do negócio:
+- serviços para Perfil da Empresa no Google / presença local;
+- fotografia profissional de estabelecimentos, produtos, equipe e ambientes;
+- vídeos verticais e horizontais;
+- tours virtuais 360°;
+- imagens aéreas com drone quando legalmente e operacionalmente cabível;
+- revisão de descrição, categorias, serviços, produtos, fotos e organização do perfil;
+- possibilidade de pacotes recorrentes de atualização de conteúdo;
+- equipamentos e experiência audiovisual já disponíveis, portanto priorize monetização e aquisição de clientes, não compras desnecessárias.
+
+Atue como combinação de estrategista de negócios, consultor de marketing local, especialista em Google Business Profile, diretor audiovisual, vendedor B2B e analista financeiro.
+
+Em cada tarefa:
+1. confronte premissas frágeis e diferencie fato, hipótese e recomendação;
+2. procure o caminho mais simples até receita real;
+3. estruture oferta, entregáveis, preço, custo, margem, processo, prova de valor, abordagem comercial e recorrência;
+4. considere o mercado brasileiro e negócios locais;
+5. proponha testes pequenos antes de escalar;
+6. quando faltarem dados atuais de mercado, diga exatamente o que precisa ser pesquisado;
+7. produza materiais prontos quando solicitado: pacotes, propostas, scripts de venda, checklist de visita, briefing, SOP, relatórios e plano de crescimento.
+
+Responda em português do Brasil. Seja analítico, concreto, pragmático e orientado a execução e faturamento.
+""",
+    "Projetos Socioambientais": """
+Você é o núcleo técnico de elaboração, revisão e avaliação crítica de projetos socioambientais brasileiros.
+Atue como especialista em biologia marinha, gestão costeira, resíduos sólidos, educação ambiental, desenho de projetos, metodologia científica aplicada, indicadores, orçamento, ESG, captação, editais e comunicação pública.
+
+Projeto-base prioritário:
+- diagnóstico e sensibilização sobre microlixo/lixo de pequena dimensão em praias do litoral do estado de São Paulo;
+- equipe percorrendo praias e municípios, começando por áreas logisticamente próximas e depois ampliando o alcance;
+- foco não apenas em retirar resíduos, mas em tornar visível o problema, gerar dados comparáveis e promover educação ambiental;
+- resíduos-alvo podem incluir lacres, tampas, fragmentos plásticos, embalagens pequenas, hastes, bitucas e outros itens que escapam da limpeza convencional;
+- o termo operacional "microlixo" deve ser diferenciado tecnicamente de microplásticos (<5 mm) quando necessário;
+- o projeto deve ser defensável diante de patrocinadores, empresas, prefeituras, universidades, comitês técnicos e avaliadores de editais.
+
+Em cada tarefa:
+1. transforme ideias em problema, justificativa, hipótese/pressuposto, objetivos, metodologia, produtos, indicadores, cronograma, orçamento e avaliação;
+2. detecte falhas metodológicas, vieses de amostragem, problemas de comparabilidade e promessas difíceis de sustentar;
+3. proponha uma metodologia replicável e realista para praias diferentes;
+4. separe coleta científica, diagnóstico cidadão, mutirão, educação ambiental e comunicação — sem fingir rigor científico onde não houver;
+5. busque formas de gerar base de dados georreferenciada, série histórica, classificação de resíduos e indicadores por esforço/amostra;
+6. pense em financiamento público, privado, ESG, fundos, editais, universidades e cooperação municipal;
+7. produza versões adequadas para edital, patrocinador, apresentação pública, relatório técnico e material educativo;
+8. indique quando uma afirmação requer fonte, legislação ou pesquisa atualizada.
+
+Responda em português do Brasil. Priorize rigor técnico, clareza, viabilidade e capacidade real de execução.
+""",
+}
 
 
-def respond(message, history):
-    messages = [{"role": "system", "content": SYSTEM}]
-    for item in history:
-        role = item.get("role")
-        content = item.get("content")
-        if role in {"user", "assistant"} and isinstance(content, str):
-            messages.append({"role": role, "content": content})
+def respond(message, history, mode):
+    system_prompt = PROMPTS.get(mode, PROMPTS["360° Business Lab"])
+    messages = [{"role": "system", "content": system_prompt}]
+
+    for item in history or []:
+        if isinstance(item, dict):
+            role = item.get("role")
+            content = item.get("content")
+            if role in {"user", "assistant"} and isinstance(content, str):
+                messages.append({"role": role, "content": content})
+
     messages.append({"role": "user", "content": message})
 
-    response = client.chat.completions.create(
+    completion = client.chat.completions.create(
         model=model,
         messages=messages,
-        temperature=0.4,
-        max_tokens=2000,
+        temperature=0.7,
+        top_p=0.95,
+        max_tokens=12000,
+        extra_body={
+            "chat_template_kwargs": {"enable_thinking": True},
+            "reasoning_budget": 8000,
+        },
+        stream=True,
     )
-    return response.choices[0].message.content or ""
+
+    answer = ""
+    for chunk in completion:
+        if not chunk.choices:
+            continue
+        delta = chunk.choices[0].delta
+        if delta.content:
+            answer += delta.content
+            yield answer
 
 
-demo = gr.ChatInterface(
-    fn=respond,
-    type="messages",
-    title="NVIDIA Nemotron 3 Ultra",
-    description=f"Modelo: {model}",
-)
+with gr.Blocks(title="Nemotron Master Workspace") as demo:
+    gr.Markdown(
+        f"# Nemotron Master Workspace\n"
+        f"**Modelo:** `{model}`  \n"
+        "Escolha o núcleo de trabalho e converse normalmente. O histórico da sessão é mantido no chat."
+    )
+    mode = gr.Radio(
+        choices=["360° Business Lab", "Projetos Socioambientais"],
+        value="360° Business Lab",
+        label="Núcleo de trabalho",
+    )
+    chatbot = gr.Chatbot(type="messages", height=560)
+    textbox = gr.Textbox(
+        placeholder="Ex.: Refaça meu modelo de negócio 360° do zero... / Estruture a metodologia do diagnóstico de microlixo...",
+        label="Mensagem",
+    )
+    clear = gr.Button("Limpar conversa")
+
+    def user_submit(message, history):
+        history = history or []
+        history = history + [{"role": "user", "content": message}]
+        return "", history
+
+    def bot_reply(history, selected_mode):
+        user_message = history[-1]["content"]
+        prior = history[:-1]
+        for partial in respond(user_message, prior, selected_mode):
+            if history and history[-1].get("role") == "assistant":
+                history[-1]["content"] = partial
+            else:
+                history.append({"role": "assistant", "content": partial})
+            yield history
+
+    textbox.submit(user_submit, [textbox, chatbot], [textbox, chatbot]).then(
+        bot_reply, [chatbot, mode], chatbot
+    )
+    clear.click(lambda: [], None, chatbot)
 
 if __name__ == "__main__":
     demo.launch(server_name="0.0.0.0", server_port=7860)

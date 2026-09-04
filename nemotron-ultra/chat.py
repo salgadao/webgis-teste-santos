@@ -15,11 +15,12 @@ client = OpenAI(api_key=api_key, base_url=base_url)
 messages = [
     {
         "role": "system",
-        "content": "Você é um assistente técnico. Responda em português do Brasil, de forma clara e precisa."
+        "content": "Você é um assistente técnico. Responda em português do Brasil, de forma clara, precisa e útil."
     }
 ]
 
 print(f"Nemotron 3 Ultra — modelo: {model}")
+print("Raciocínio: ativado | Streaming: ativado")
 print("Digite /sair para encerrar.\n")
 
 while True:
@@ -31,13 +32,38 @@ while True:
 
     messages.append({"role": "user", "content": user_text})
 
-    response = client.chat.completions.create(
+    completion = client.chat.completions.create(
         model=model,
         messages=messages,
-        temperature=0.4,
-        max_tokens=2000,
+        temperature=1,
+        top_p=0.95,
+        max_tokens=16384,
+        extra_body={"chat_template_kwargs": {"enable_thinking": True}},
+        stream=True,
     )
 
-    answer = response.choices[0].message.content or ""
-    print(f"\nNemotron: {answer}\n")
+    reasoning_parts = []
+    answer_parts = []
+    answer_started = False
+
+    print("\n[Raciocínio]\n", end="")
+    for chunk in completion:
+        if not chunk.choices:
+            continue
+
+        delta = chunk.choices[0].delta
+        reasoning = getattr(delta, "reasoning_content", None)
+        if reasoning:
+            reasoning_parts.append(reasoning)
+            print(reasoning, end="", flush=True)
+
+        if delta.content is not None:
+            if not answer_started:
+                print("\n\n[Nemotron]\n", end="")
+                answer_started = True
+            answer_parts.append(delta.content)
+            print(delta.content, end="", flush=True)
+
+    answer = "".join(answer_parts)
+    print("\n")
     messages.append({"role": "assistant", "content": answer})

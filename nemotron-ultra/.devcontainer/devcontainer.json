@@ -1,0 +1,12 @@
+{
+  "name": "Nemotron 3 Ultra",
+  "image": "mcr.microsoft.com/devcontainers/python:1-3.12-bookworm",
+  "postCreateCommand": "cd nemotron-ultra && python -m pip install -r requirements.txt",
+  "forwardPorts": [7860],
+  "portsAttributes": {
+    "7860": {
+      "label": "Nemotron Web UI",
+      "onAutoForward": "openPreview"
+    }
+  }
+}

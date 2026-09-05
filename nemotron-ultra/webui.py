@@ -1,20 +1,9 @@
 import os
-from dotenv import load_dotenv
 from openai import OpenAI
 import gradio as gr
 
-load_dotenv()
-
-api_key = os.getenv("NVIDIA_API_KEY")
-base_url = os.getenv("NVIDIA_BASE_URL", "https://integrate.api.nvidia.com/v1")
-model = os.getenv("NEMOTRON_MODEL", "nvidia/nemotron-3-ultra-550b-a55b")
-
-if not api_key or api_key.startswith("nvapi-SUA_CHAVE"):
-    raise SystemExit(
-        "NVIDIA_API_KEY não configurada. Gere uma chave NOVA e defina-a no ambiente antes de iniciar."
-    )
-
-client = OpenAI(api_key=api_key, base_url=base_url)
+BASE_URL = "https://integrate.api.nvidia.com/v1"
+MODEL = "nvidia/nemotron-3-ultra-550b-a55b"
 
 PROMPTS = {
     "360° Business Lab": """
@@ -22,14 +11,14 @@ Você é o estrategista principal de um negócio brasileiro de presença digital
 Seu trabalho é transformar uma operação ainda em validação em um negócio comercialmente viável, simples de vender e escalável.
 
 Contexto-base do negócio:
-- serviços para Perfil da Empresa no Google / presença local;
+- Perfil da Empresa no Google e presença local;
 - fotografia profissional de estabelecimentos, produtos, equipe e ambientes;
 - vídeos verticais e horizontais;
 - tours virtuais 360°;
 - imagens aéreas com drone quando legalmente e operacionalmente cabível;
 - revisão de descrição, categorias, serviços, produtos, fotos e organização do perfil;
-- possibilidade de pacotes recorrentes de atualização de conteúdo;
-- equipamentos e experiência audiovisual já disponíveis, portanto priorize monetização e aquisição de clientes, não compras desnecessárias.
+- pacotes recorrentes de atualização de conteúdo;
+- equipamentos e experiência audiovisual já disponíveis, então priorize monetização e aquisição de clientes, não compras desnecessárias.
 
 Atue como combinação de estrategista de negócios, consultor de marketing local, especialista em Google Business Profile, diretor audiovisual, vendedor B2B e analista financeiro.
 
@@ -57,11 +46,11 @@ Projeto-base prioritário:
 - o projeto deve ser defensável diante de patrocinadores, empresas, prefeituras, universidades, comitês técnicos e avaliadores de editais.
 
 Em cada tarefa:
-1. transforme ideias em problema, justificativa, hipótese/pressuposto, objetivos, metodologia, produtos, indicadores, cronograma, orçamento e avaliação;
+1. transforme ideias em problema, justificativa, objetivos, metodologia, produtos, indicadores, cronograma, orçamento e avaliação;
 2. detecte falhas metodológicas, vieses de amostragem, problemas de comparabilidade e promessas difíceis de sustentar;
-3. proponha uma metodologia replicável e realista para praias diferentes;
-4. separe coleta científica, diagnóstico cidadão, mutirão, educação ambiental e comunicação — sem fingir rigor científico onde não houver;
-5. busque formas de gerar base de dados georreferenciada, série histórica, classificação de resíduos e indicadores por esforço/amostra;
+3. proponha metodologia replicável e realista para praias diferentes;
+4. separe coleta científica, diagnóstico cidadão, mutirão, educação ambiental e comunicação;
+5. pense em base georreferenciada, série histórica, classificação de resíduos e indicadores por esforço/amostra;
 6. pense em financiamento público, privado, ESG, fundos, editais, universidades e cooperação municipal;
 7. produza versões adequadas para edital, patrocinador, apresentação pública, relatório técnico e material educativo;
 8. indique quando uma afirmação requer fonte, legislação ou pesquisa atualizada.
@@ -71,7 +60,12 @@ Responda em português do Brasil. Priorize rigor técnico, clareza, viabilidade 
 }
 
 
-def respond(message, history, mode):
+def respond(message, history, mode, api_key):
+    if not api_key or not api_key.strip().startswith("nvapi-"):
+        yield "⚠️ Cole uma NVIDIA API Key válida no campo acima. Ela deve começar com `nvapi-`."
+        return
+
+    client = OpenAI(api_key=api_key.strip(), base_url=BASE_URL)
     system_prompt = PROMPTS.get(mode, PROMPTS["360° Business Lab"])
     messages = [{"role": "system", "content": system_prompt}]
 
@@ -84,43 +78,51 @@ def respond(message, history, mode):
 
     messages.append({"role": "user", "content": message})
 
-    completion = client.chat.completions.create(
-        model=model,
-        messages=messages,
-        temperature=0.7,
-        top_p=0.95,
-        max_tokens=12000,
-        extra_body={
-            "chat_template_kwargs": {"enable_thinking": True},
-            "reasoning_budget": 8000,
-        },
-        stream=True,
-    )
+    try:
+        completion = client.chat.completions.create(
+            model=MODEL,
+            messages=messages,
+            temperature=0.7,
+            top_p=0.95,
+            max_tokens=12000,
+            extra_body={"chat_template_kwargs": {"enable_thinking": True}},
+            stream=True,
+        )
 
-    answer = ""
-    for chunk in completion:
-        if not chunk.choices:
-            continue
-        delta = chunk.choices[0].delta
-        if delta.content:
-            answer += delta.content
-            yield answer
+        answer = ""
+        for chunk in completion:
+            if not chunk.choices:
+                continue
+            delta = chunk.choices[0].delta
+            if delta.content:
+                answer += delta.content
+                yield answer
+    except Exception as e:
+        yield f"❌ Não consegui acessar o Nemotron. Verifique a chave NVIDIA. Erro: {e}"
 
 
 with gr.Blocks(title="Nemotron Master Workspace") as demo:
     gr.Markdown(
         f"# Nemotron Master Workspace\n"
-        f"**Modelo:** `{model}`  \n"
-        "Escolha o núcleo de trabalho e converse normalmente. O histórico da sessão é mantido no chat."
+        f"**Modelo:** `{MODEL}`  \n"
+        "Sua chave é usada apenas para esta sessão do navegador e não é salva no GitHub."
     )
+
+    api_key = gr.Textbox(
+        label="NVIDIA API Key",
+        placeholder="Cole aqui sua NOVA chave nvapi-...",
+        type="password",
+    )
+
     mode = gr.Radio(
         choices=["360° Business Lab", "Projetos Socioambientais"],
         value="360° Business Lab",
         label="Núcleo de trabalho",
     )
+
     chatbot = gr.Chatbot(type="messages", height=560)
     textbox = gr.Textbox(
-        placeholder="Ex.: Refaça meu modelo de negócio 360° do zero... / Estruture a metodologia do diagnóstico de microlixo...",
+        placeholder="Escreva normalmente o que quer construir ou revisar...",
         label="Mensagem",
     )
     clear = gr.Button("Limpar conversa")
@@ -130,10 +132,10 @@ with gr.Blocks(title="Nemotron Master Workspace") as demo:
         history = history + [{"role": "user", "content": message}]
         return "", history
 
-    def bot_reply(history, selected_mode):
+    def bot_reply(history, selected_mode, key):
         user_message = history[-1]["content"]
         prior = history[:-1]
-        for partial in respond(user_message, prior, selected_mode):
+        for partial in respond(user_message, prior, selected_mode, key):
             if history and history[-1].get("role") == "assistant":
                 history[-1]["content"] = partial
             else:
@@ -141,7 +143,7 @@ with gr.Blocks(title="Nemotron Master Workspace") as demo:
             yield history
 
     textbox.submit(user_submit, [textbox, chatbot], [textbox, chatbot]).then(
-        bot_reply, [chatbot, mode], chatbot
+        bot_reply, [chatbot, mode, api_key], chatbot
     )
     clear.click(lambda: [], None, chatbot)
 

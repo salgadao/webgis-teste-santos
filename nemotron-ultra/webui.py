@@ -1,4 +1,3 @@
-import os
 from openai import OpenAI
 import gradio as gr
 
@@ -60,25 +59,31 @@ Responda em português do Brasil. Priorize rigor técnico, clareza, viabilidade 
 }
 
 
-def respond(message, history, mode, api_key):
+def stream_chat(message, history, mode, api_key):
+    history = history or []
+
     if not api_key or not api_key.strip().startswith("nvapi-"):
-        yield "⚠️ Cole uma NVIDIA API Key válida no campo acima. Ela deve começar com `nvapi-`."
+        history = history + [[message, "⚠️ Cole uma NVIDIA API Key válida no campo acima. Ela deve começar com nvapi-."]]
+        yield "", history
         return
 
-    client = OpenAI(api_key=api_key.strip(), base_url=BASE_URL)
     system_prompt = PROMPTS.get(mode, PROMPTS["360° Business Lab"])
     messages = [{"role": "system", "content": system_prompt}]
 
-    for item in history or []:
-        if isinstance(item, dict):
-            role = item.get("role")
-            content = item.get("content")
-            if role in {"user", "assistant"} and isinstance(content, str):
-                messages.append({"role": role, "content": content})
+    for pair in history:
+        if isinstance(pair, (list, tuple)) and len(pair) == 2:
+            user_text, assistant_text = pair
+            if user_text:
+                messages.append({"role": "user", "content": str(user_text)})
+            if assistant_text:
+                messages.append({"role": "assistant", "content": str(assistant_text)})
 
     messages.append({"role": "user", "content": message})
+    history = history + [[message, ""]]
+    yield "", history
 
     try:
+        client = OpenAI(api_key=api_key.strip(), base_url=BASE_URL)
         completion = client.chat.completions.create(
             model=MODEL,
             messages=messages,
@@ -94,18 +99,26 @@ def respond(message, history, mode, api_key):
             if not chunk.choices:
                 continue
             delta = chunk.choices[0].delta
-            if delta.content:
-                answer += delta.content
-                yield answer
+            content = getattr(delta, "content", None)
+            if content:
+                answer += content
+                history[-1][1] = answer
+                yield "", history
+
+        if not answer:
+            history[-1][1] = "O modelo respondeu sem conteúdo visível. Tente novamente."
+            yield "", history
+
     except Exception as e:
-        yield f"❌ Não consegui acessar o Nemotron. Verifique a chave NVIDIA. Erro: {e}"
+        history[-1][1] = f"❌ Não consegui acessar o Nemotron. Verifique a chave NVIDIA. Erro: {e}"
+        yield "", history
 
 
 with gr.Blocks(title="Nemotron Master Workspace") as demo:
     gr.Markdown(
         f"# Nemotron Master Workspace\n"
         f"**Modelo:** `{MODEL}`  \n"
-        "Sua chave é usada apenas para esta sessão do navegador e não é salva no GitHub."
+        "Sua chave é usada apenas nesta sessão do navegador e não é salva no GitHub."
     )
 
     api_key = gr.Textbox(
@@ -120,30 +133,17 @@ with gr.Blocks(title="Nemotron Master Workspace") as demo:
         label="Núcleo de trabalho",
     )
 
-    chatbot = gr.Chatbot(type="messages", height=560)
+    chatbot = gr.Chatbot(height=560)
     textbox = gr.Textbox(
         placeholder="Escreva normalmente o que quer construir ou revisar...",
         label="Mensagem",
     )
     clear = gr.Button("Limpar conversa")
 
-    def user_submit(message, history):
-        history = history or []
-        history = history + [{"role": "user", "content": message}]
-        return "", history
-
-    def bot_reply(history, selected_mode, key):
-        user_message = history[-1]["content"]
-        prior = history[:-1]
-        for partial in respond(user_message, prior, selected_mode, key):
-            if history and history[-1].get("role") == "assistant":
-                history[-1]["content"] = partial
-            else:
-                history.append({"role": "assistant", "content": partial})
-            yield history
-
-    textbox.submit(user_submit, [textbox, chatbot], [textbox, chatbot]).then(
-        bot_reply, [chatbot, mode, api_key], chatbot
+    textbox.submit(
+        stream_chat,
+        inputs=[textbox, chatbot, mode, api_key],
+        outputs=[textbox, chatbot],
     )
     clear.click(lambda: [], None, chatbot)
 

@@ -1,0 +1,82 @@
+defaults:
+  subagents:
+    maxSpawnDepth: 2
+
+main:
+  subagents:
+    allowAgents:
+      - market-intel
+      - lead-scout
+      - sales-strategy
+      - seo-copy
+      - pricing-finance
+      - legal-ops
+      - brand-web
+      - qa-critic
+    delegationMode: prefer
+    requireAgentId: true
+
+agents:
+  - id: market-intel
+    description: "Pesquisa mercado, concorrentes, nichos, tendências, referências e oportunidades na Baixada Santista e litoral norte de São Paulo. Separa fatos observados de inferências."
+    model: nvidia/nemotron-3-ultra-550b-a55b
+    tools:
+      profile: minimal
+      allow: [web_search, web_fetch, read, write]
+      deny: [gateway]
+
+  - id: lead-scout
+    description: "Descobre, qualifica e enriquece leads locais. Procura sinais públicos de oportunidade no Google/web, cria dossiês por empresa e prioriza quem tem maior probabilidade de comprar fotografia, tour 360, vídeo, drone e presença local."
+    model: nvidia/nemotron-3-ultra-550b-a55b
+    tools:
+      profile: minimal
+      allow: [web_search, web_fetch, read, write, exec]
+      deny: [gateway]
+
+  - id: sales-strategy
+    description: "Transforma evidências do lead em abordagem comercial personalizada, diagnóstico, argumento de valor, objeções e follow-up. Nunca inventa defeitos ou métricas que não foram observados."
+    model: nvidia/nemotron-3-ultra-550b-a55b
+    tools:
+      profile: minimal
+      allow: [web_search, web_fetch, read, write]
+      deny: [gateway, exec]
+
+  - id: seo-copy
+    description: "Especialista em Perfil da Empresa no Google, SEO local, descrições, categorias, serviços, FAQs, conteúdo, palavras-chave e copy de conversão para negócios locais brasileiros."
+    model: nvidia/nemotron-3-ultra-550b-a55b
+    tools:
+      profile: minimal
+      allow: [web_search, web_fetch, read, write]
+      deny: [gateway, exec]
+
+  - id: pricing-finance
+    description: "Estrutura preços, pacotes, margem, capacidade operacional, recorrência, CAC, ticket, MRR, projeções, metas e testes comerciais. Calcula cenários e identifica ofertas inviáveis."
+    model: nvidia/nemotron-3-ultra-550b-a55b
+    tools:
+      profile: minimal
+      allow: [read, write, exec]
+      deny: [gateway]
+
+  - id: legal-ops
+    description: "Cria e revisa escopo, proposta, contrato, termos de uso de imagem, autorização de voo quando aplicável, política de revisão, SLA, pagamento, cancelamento e SOPs. Sinaliza quando validação jurídica externa é necessária."
+    model: nvidia/nemotron-3-ultra-550b-a55b
+    tools:
+      profile: minimal
+      allow: [web_search, web_fetch, read, write]
+      deny: [gateway, exec]
+
+  - id: brand-web
+    description: "Direção de marca e conversão: naming, posicionamento, identidade verbal, estrutura de site/landing page, portfólio, estudos de caso, CTAs, briefs visuais e conteúdo comercial."
+    model: nvidia/nemotron-3-ultra-550b-a55b
+    tools:
+      profile: minimal
+      allow: [web_search, web_fetch, read, write, exec]
+      deny: [gateway]
+
+  - id: qa-critic
+    description: "Auditor adversarial da equipe. Confere fatos, fontes, coerência, promessas comerciais, números, riscos e hallucinations. Só aprova material de venda quando a evidência suporta as afirmações."
+    model: nvidia/nemotron-3-ultra-550b-a55b
+    tools:
+      profile: minimal
+      allow: [web_search, web_fetch, read, write]
+      deny: [gateway, exec]

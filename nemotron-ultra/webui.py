@@ -59,59 +59,35 @@ Responda em português do Brasil. Priorize rigor técnico, clareza, viabilidade 
 }
 
 
-def stream_chat(message, history, mode, api_key):
-    history = history or []
-
+def ask_nemotron(message, mode, api_key):
     if not api_key or not api_key.strip().startswith("nvapi-"):
-        history = history + [[message, "⚠️ Cole uma NVIDIA API Key válida no campo acima. Ela deve começar com nvapi-."]]
-        yield "", history
-        return
+        return "⚠️ Cole uma NVIDIA API Key válida no campo acima. Ela deve começar com nvapi-."
 
-    system_prompt = PROMPTS.get(mode, PROMPTS["360° Business Lab"])
-    messages = [{"role": "system", "content": system_prompt}]
-
-    for pair in history:
-        if isinstance(pair, (list, tuple)) and len(pair) == 2:
-            user_text, assistant_text = pair
-            if user_text:
-                messages.append({"role": "user", "content": str(user_text)})
-            if assistant_text:
-                messages.append({"role": "assistant", "content": str(assistant_text)})
-
-    messages.append({"role": "user", "content": message})
-    history = history + [[message, ""]]
-    yield "", history
+    if not message or not message.strip():
+        return "⚠️ Escreva uma pergunta ou tarefa no campo Mensagem."
 
     try:
         client = OpenAI(api_key=api_key.strip(), base_url=BASE_URL)
-        completion = client.chat.completions.create(
+        response = client.chat.completions.create(
             model=MODEL,
-            messages=messages,
+            messages=[
+                {"role": "system", "content": PROMPTS.get(mode, PROMPTS["360° Business Lab"])},
+                {"role": "user", "content": message.strip()},
+            ],
             temperature=0.7,
             top_p=0.95,
             max_tokens=12000,
             extra_body={"chat_template_kwargs": {"enable_thinking": True}},
-            stream=True,
+            stream=False,
         )
 
-        answer = ""
-        for chunk in completion:
-            if not chunk.choices:
-                continue
-            delta = chunk.choices[0].delta
-            content = getattr(delta, "content", None)
-            if content:
-                answer += content
-                history[-1][1] = answer
-                yield "", history
-
-        if not answer:
-            history[-1][1] = "O modelo respondeu sem conteúdo visível. Tente novamente."
-            yield "", history
+        content = response.choices[0].message.content
+        if not content:
+            return "O modelo respondeu sem conteúdo visível. Tente novamente."
+        return content
 
     except Exception as e:
-        history[-1][1] = f"❌ Não consegui acessar o Nemotron. Verifique a chave NVIDIA. Erro: {e}"
-        yield "", history
+        return f"❌ Não consegui acessar o Nemotron. Verifique a chave NVIDIA. Erro: {e}"
 
 
 with gr.Blocks(title="Nemotron Master Workspace") as demo:
@@ -133,19 +109,35 @@ with gr.Blocks(title="Nemotron Master Workspace") as demo:
         label="Núcleo de trabalho",
     )
 
-    chatbot = gr.Chatbot(height=560)
-    textbox = gr.Textbox(
-        placeholder="Escreva normalmente o que quer construir ou revisar...",
+    message = gr.Textbox(
         label="Mensagem",
+        placeholder="Escreva normalmente o que quer construir ou revisar...",
+        lines=8,
     )
-    clear = gr.Button("Limpar conversa")
 
-    textbox.submit(
-        stream_chat,
-        inputs=[textbox, chatbot, mode, api_key],
-        outputs=[textbox, chatbot],
+    send = gr.Button("Enviar para o Nemotron")
+
+    answer = gr.Textbox(
+        label="Resposta do Nemotron 3 Ultra",
+        lines=24,
+        interactive=False,
     )
-    clear.click(lambda: [], None, chatbot)
+
+    clear = gr.Button("Limpar resposta")
+
+    send.click(
+        ask_nemotron,
+        inputs=[message, mode, api_key],
+        outputs=answer,
+    )
+
+    message.submit(
+        ask_nemotron,
+        inputs=[message, mode, api_key],
+        outputs=answer,
+    )
+
+    clear.click(lambda: "", None, answer)
 
 if __name__ == "__main__":
     demo.launch(server_name="0.0.0.0", server_port=7860)

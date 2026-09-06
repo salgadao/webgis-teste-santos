@@ -50,6 +50,11 @@ if [[ "$NVIDIA_INFERENCE_API_KEY" != nvapi-* ]]; then
   exit 5
 fi
 
+# O Nemotron 3 Ultra suporta contexto de até 1 milhão de tokens. NemoClaw permite
+# gravar esse limite no config gerado durante o onboarding.
+export NEMOCLAW_CONTEXT_WINDOW=1000000
+export NEMOCLAW_REASONING=true
+
 printf '\nPesquisa web opcional.\n'
 printf 'Se você já tiver Tavily API key, cole agora; senão apenas pressione Enter.\n'
 read -r -s -p 'Tavily API key (opcional): ' TAVILY_API_KEY
@@ -87,3 +92,5 @@ printf '\nA chave NVIDIA foi usada apenas como variável do processo. Feche este
 
 unset NVIDIA_INFERENCE_API_KEY
 unset TAVILY_API_KEY 2>/dev/null || true
+unset NEMOCLAW_CONTEXT_WINDOW
+unset NEMOCLAW_REASONING
